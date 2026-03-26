@@ -28,9 +28,12 @@ import {
   Video,
   Download,
   Zap,
-  ChevronDown,
   Loader2,
   Check,
+  PanelLeftOpen,
+  PanelRightOpen,
+  Settings2,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -81,6 +84,16 @@ const nodeCategories = [
   { type: "output", label: "输出", icon: Download },
 ];
 
+const nodeTypeLabels: Record<string, string> = {
+  textInput: "文本输入节点",
+  imageGen: "图像生成节点",
+  videoGen: "视频生成节点",
+  output: "输出节点",
+};
+
+const modelOptions = ["FLUX.1", "SDXL", "Kling"];
+const sizeOptions = ["1024x1024", "768x512", "512x768", "1280x720"];
+
 function CanvasInner({ projectId }: { projectId: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
@@ -89,10 +102,18 @@ function CanvasInner({ projectId }: { projectId: string }) {
   const [saved, setSaved] = useState(false);
   const [runningAll, setRunningAll] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [leftOpen, setLeftOpen] = useState(true);
+  const [rightOpen, setRightOpen] = useState(true);
   const idCounter = useRef(10);
   const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { getNodes, getEdges, getNode } = useReactFlow();
+  const { getNodes, getEdges, getNode, updateNodeData } = useReactFlow();
   const runGeneration = useCanvasStore((s) => s.runGeneration);
+  const nodeStatuses = useCanvasStore((s) => s.nodeStatuses);
+
+  const selectedNode = selectedNodeId
+    ? nodes.find((n) => n.id === selectedNodeId) || null
+    : null;
 
   // Load project on mount
   useEffect(() => {
@@ -126,6 +147,14 @@ function CanvasInner({ projectId }: { projectId: string }) {
     }
     loadProject();
   }, [projectId, setNodes, setEdges]);
+
+  // Hide sidebars on mobile by default
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setLeftOpen(false);
+      setRightOpen(false);
+    }
+  }, []);
 
   // Auto-save (debounced 3s)
   useEffect(() => {
@@ -190,6 +219,15 @@ function CanvasInner({ projectId }: { projectId: string }) {
     ]);
   }
 
+  function deleteSelectedNode() {
+    if (!selectedNodeId) return;
+    setNodes((nds) => nds.filter((n) => n.id !== selectedNodeId));
+    setEdges((eds) =>
+      eds.filter((e) => e.source !== selectedNodeId && e.target !== selectedNodeId)
+    );
+    setSelectedNodeId(null);
+  }
+
   // Run all generation nodes sequentially
   async function handleRunAll() {
     setRunningAll(true);
@@ -225,6 +263,166 @@ function CanvasInner({ projectId }: { projectId: string }) {
     setRunningAll(false);
   }
 
+  function onNodeClick(_: React.MouseEvent, node: Node) {
+    setSelectedNodeId(node.id);
+    // Auto-open right panel on mobile when selecting
+    if (window.innerWidth < 768 && !rightOpen) {
+      setRightOpen(true);
+    }
+  }
+
+  function onPaneClick() {
+    setSelectedNodeId(null);
+  }
+
+  // Render the right config panel content based on selected node
+  function renderConfigPanel() {
+    if (!selectedNode) {
+      return (
+        <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
+          <Settings2 className="mx-auto h-8 w-8 text-gray-300" />
+          <p className="mt-2 text-xs text-gray-400">点击节点查看配置</p>
+        </div>
+      );
+    }
+
+    const nodeType = selectedNode.type || "unknown";
+    const data = selectedNode.data as Record<string, unknown>;
+    const status = nodeStatuses[selectedNode.id] || (data.status as string) || "idle";
+
+    const statusColors: Record<string, string> = {
+      idle: "bg-gray-400",
+      running: "bg-yellow-400 animate-pulse",
+      success: "bg-green-400",
+      failed: "bg-red-400",
+    };
+    const statusLabels: Record<string, string> = {
+      idle: "就绪",
+      running: "运行中",
+      success: "已完成",
+      failed: "失败",
+    };
+
+    return (
+      <div className="mt-4 space-y-4">
+        {/* Node info */}
+        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-gray-700">
+              {nodeTypeLabels[nodeType] || nodeType}
+            </span>
+            <div className="flex items-center gap-1.5">
+              <div className={`h-2 w-2 rounded-full ${statusColors[status]}`} />
+              <span className="text-xs text-gray-500">{statusLabels[status]}</span>
+            </div>
+          </div>
+          <p className="mt-1 text-[10px] text-gray-400 font-mono">{selectedNode.id}</p>
+        </div>
+
+        {/* TextInput config */}
+        {nodeType === "textInput" && (
+          <div>
+            <label className="text-xs font-medium text-gray-500">Prompt</label>
+            <textarea
+              className="mt-1 w-full resize-none rounded-lg border border-gray-200 p-2 text-xs focus:border-violet-300 focus:outline-none"
+              rows={4}
+              value={(data.value as string) || ""}
+              onChange={(e) =>
+                updateNodeData(selectedNode.id, { value: e.target.value })
+              }
+              placeholder="输入 Prompt..."
+            />
+          </div>
+        )}
+
+        {/* ImageGen / VideoGen config */}
+        {(nodeType === "imageGen" || nodeType === "videoGen") && (
+          <>
+            <div>
+              <label className="text-xs font-medium text-gray-500">模型</label>
+              <div className="mt-1 space-y-1">
+                {(nodeType === "videoGen"
+                  ? ["Kling"]
+                  : modelOptions.filter((m) => m !== "Kling")
+                ).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() =>
+                      updateNodeData(selectedNode.id, { model: m })
+                    }
+                    className={`flex w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                      (data.model as string) === m
+                        ? "border-violet-300 bg-violet-50 text-violet-700 font-medium"
+                        : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    <div className="h-2 w-2 rounded-full bg-green-400" />
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {nodeType === "imageGen" && (
+              <div>
+                <label className="text-xs font-medium text-gray-500">尺寸</label>
+                <div className="mt-1 grid grid-cols-2 gap-1.5">
+                  {sizeOptions.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() =>
+                        updateNodeData(selectedNode.id, { size: s })
+                      }
+                      className={`rounded-lg border px-2 py-1.5 text-[11px] transition-colors ${
+                        (data.size as string || "1024x1024") === s
+                          ? "border-violet-300 bg-violet-50 text-violet-700 font-medium"
+                          : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Output config */}
+        {nodeType === "output" && (
+          <div>
+            <label className="text-xs font-medium text-gray-500">输出类型</label>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              {["image", "video"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() =>
+                    updateNodeData(selectedNode.id, { type: t })
+                  }
+                  className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                    (data.type as string) === t
+                      ? "border-violet-300 bg-violet-50 text-violet-700 font-medium"
+                      : "border-gray-200 text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
+                  {t === "image" ? "图片" : "视频"}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Delete node */}
+        <button
+          onClick={deleteSelectedNode}
+          className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-red-200 px-3 py-2 text-xs text-red-600 transition-colors hover:bg-red-50"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          删除节点
+        </button>
+      </div>
+    );
+  }
+
   if (!loaded) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-50">
@@ -236,8 +434,14 @@ function CanvasInner({ projectId }: { projectId: string }) {
   return (
     <div className="flex h-screen flex-col bg-gray-50">
       {/* Toolbar */}
-      <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4">
-        <div className="flex items-center gap-3">
+      <header className="flex h-14 items-center justify-between border-b border-gray-200 bg-white px-2 sm:px-4">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <button
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 md:hidden"
+            onClick={() => setLeftOpen(!leftOpen)}
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
           <Link
             href="/workspace"
             className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
@@ -247,11 +451,11 @@ function CanvasInner({ projectId }: { projectId: string }) {
           <div className="flex h-7 w-7 items-center justify-center rounded bg-violet-600">
             <Zap className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-semibold text-gray-900">
+          <span className="text-sm font-semibold text-gray-900 truncate max-w-[120px] sm:max-w-none">
             {projectName}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <Button
             variant="outline"
             size="sm"
@@ -266,7 +470,9 @@ function CanvasInner({ projectId }: { projectId: string }) {
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}
-            {saving ? "保存中..." : saved ? "已保存" : "保存"}
+            <span className="hidden sm:inline">
+              {saving ? "保存中..." : saved ? "已保存" : "保存"}
+            </span>
           </Button>
           <Button
             size="sm"
@@ -279,46 +485,67 @@ function CanvasInner({ projectId }: { projectId: string }) {
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            {runningAll ? "运行中..." : "运行全部"}
+            <span className="hidden sm:inline">
+              {runningAll ? "运行中..." : "运行全部"}
+            </span>
           </Button>
+          <button
+            className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 md:hidden"
+            onClick={() => setRightOpen(!rightOpen)}
+          >
+            <PanelRightOpen className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden relative">
         {/* Left: Node Panel */}
-        <aside className="w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-            节点
-          </p>
-          <div className="mt-3 space-y-2">
-            {nodeCategories.map((cat) => (
-              <button
-                key={cat.type}
-                onClick={() => addNode(cat.type)}
-                className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
-              >
-                <cat.icon className="h-4 w-4 text-violet-500" />
-                {cat.label}
-              </button>
-            ))}
-          </div>
-          <div className="mt-6">
+        {leftOpen && (
+          <aside className="absolute md:relative z-20 h-full w-56 shrink-0 overflow-y-auto border-r border-gray-200 bg-white p-4">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-              模型
+              节点
             </p>
             <div className="mt-3 space-y-2">
-              {["FLUX.1", "SDXL", "Kling"].map((model) => (
-                <div
-                  key={model}
-                  className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+              {nodeCategories.map((cat) => (
+                <button
+                  key={cat.type}
+                  onClick={() => addNode(cat.type)}
+                  className="flex w-full items-center gap-2 rounded-lg border border-gray-200 bg-white p-3 text-sm font-medium text-gray-700 transition-colors hover:border-violet-300 hover:bg-violet-50"
                 >
-                  <div className="h-2 w-2 rounded-full bg-green-400" />
-                  {model}
-                </div>
+                  <cat.icon className="h-4 w-4 text-violet-500" />
+                  {cat.label}
+                </button>
               ))}
             </div>
-          </div>
-        </aside>
+            <div className="mt-6">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+                模型
+              </p>
+              <div className="mt-3 space-y-2">
+                {["FLUX.1", "SDXL", "Kling"].map((model) => (
+                  <div
+                    key={model}
+                    className="flex items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm"
+                  >
+                    <div className="h-2 w-2 rounded-full bg-green-400" />
+                    {model}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </aside>
+        )}
+
+        {/* Mobile overlay backdrop */}
+        {(leftOpen || rightOpen) && (
+          <div
+            className="absolute inset-0 z-10 bg-black/20 md:hidden"
+            onClick={() => {
+              setLeftOpen(false);
+              setRightOpen(false);
+            }}
+          />
+        )}
 
         {/* Center: Canvas */}
         <div className="flex-1">
@@ -328,6 +555,8 @@ function CanvasInner({ projectId }: { projectId: string }) {
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onNodeClick={onNodeClick}
+            onPaneClick={onPaneClick}
             nodeTypes={nodeTypes}
             fitView
             className="bg-gray-50"
@@ -343,51 +572,15 @@ function CanvasInner({ projectId }: { projectId: string }) {
         </div>
 
         {/* Right: Config Panel */}
-        <aside className="w-64 shrink-0 overflow-y-auto border-l border-gray-200 bg-white p-4">
-          <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-            配置
-          </p>
-          <div className="mt-4 space-y-4">
-            <div>
-              <label className="text-xs font-medium text-gray-500">
-                模型选择
-              </label>
-              <div className="mt-1 flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
-                FLUX.1
-                <ChevronDown className="h-4 w-4 text-gray-400" />
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500">
-                图片尺寸
-              </label>
-              <div className="mt-1 grid grid-cols-2 gap-2">
-                <div className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-center text-xs font-medium text-violet-700">
-                  1024x1024
-                </div>
-                <div className="rounded-lg border border-gray-200 px-3 py-1.5 text-center text-xs text-gray-500">
-                  768x512
-                </div>
-              </div>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-gray-500">
-                生成步数
-              </label>
-              <input
-                type="range"
-                min={10}
-                max={50}
-                defaultValue={30}
-                className="mt-1 w-full"
-              />
-              <div className="flex justify-between text-xs text-gray-400">
-                <span>10</span>
-                <span>30</span>
-                <span>50</span>
-              </div>
-            </div>
-            <div>
+        {rightOpen && (
+          <aside className="absolute md:relative right-0 z-20 h-full w-64 shrink-0 overflow-y-auto border-l border-gray-200 bg-white p-4">
+            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
+              {selectedNode ? "节点配置" : "配置"}
+            </p>
+            {renderConfigPanel()}
+
+            {/* Run status always visible at bottom */}
+            <div className="mt-6">
               <label className="text-xs font-medium text-gray-500">
                 运行状态
               </label>
@@ -397,8 +590,8 @@ function CanvasInner({ projectId }: { projectId: string }) {
                   : "就绪 — 点击「运行全部」开始生成"}
               </div>
             </div>
-          </div>
-        </aside>
+          </aside>
+        )}
       </div>
     </div>
   );
