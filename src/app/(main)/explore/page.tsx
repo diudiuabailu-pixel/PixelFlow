@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Heart, Search, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { fetchExploreWorks } from "@/lib/api";
+import { fetchExploreWorks, createProject } from "@/lib/api";
 import { mockExploreWorks } from "@/lib/mock-data";
 
 const categories = ["全部", "图像", "视频"];
@@ -22,11 +23,41 @@ interface ExploreWork {
 }
 
 export default function ExplorePage() {
+  const router = useRouter();
   const [activeCategory, setActiveCategory] = useState("全部");
   const [searchQuery, setSearchQuery] = useState("");
   const [works, setWorks] = useState<ExploreWork[]>([]);
   const [loading, setLoading] = useState(true);
   const [usingMock, setUsingMock] = useState(false);
+  const [cloning, setCloning] = useState<string | null>(null);
+
+  async function handleCloneWorkflow(work: ExploreWork) {
+    setCloning(work.id);
+    try {
+      // Create a new project pre-filled with a text input node containing the prompt
+      const canvasData = {
+        nodes: [
+          { id: "input-1", type: "textInput", position: { x: 50, y: 200 }, data: { label: "文本输入", value: work.prompt || work.title } },
+          { id: "gen-1", type: work.category === "视频" ? "videoGen" : "imageGen", position: { x: 400, y: 150 }, data: { label: work.category === "视频" ? "视频生成" : "图像生成", model: work.model || "FLUX.1", status: "idle" } },
+          { id: "output-1", type: "output", position: { x: 750, y: 200 }, data: { label: "输出", type: work.category === "视频" ? "video" : "image", url: null } },
+        ],
+        edges: [
+          { id: "e1", source: "input-1", target: "gen-1", animated: true },
+          { id: "e2", source: "gen-1", target: "output-1", animated: true },
+        ],
+      };
+      const project = (await createProject({
+        name: `Clone: ${work.title}`,
+        description: work.prompt || work.title,
+        canvasData,
+      })) as { id: string };
+      router.push(`/canvas/${project.id}`);
+    } catch {
+      router.push("/login");
+    } finally {
+      setCloning(null);
+    }
+  }
 
   const loadWorks = useCallback(async () => {
     setLoading(true);
@@ -144,6 +175,19 @@ export default function ExplorePage() {
                       {work.likes}
                     </div>
                   )}
+                </div>
+                <div className="mt-3">
+                  <Button
+                    size="sm"
+                    className="w-full text-xs gap-1"
+                    onClick={() => handleCloneWorkflow(work)}
+                    disabled={cloning === work.id}
+                  >
+                    {cloning === work.id ? (
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                    ) : null}
+                    {cloning === work.id ? "创建中..." : "Clone Workflow"}
+                  </Button>
                 </div>
               </div>
             </div>

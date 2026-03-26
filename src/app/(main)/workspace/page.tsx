@@ -21,6 +21,7 @@ import {
   fetchProjects,
   createProject,
   deleteProject,
+  duplicateProject,
 } from "@/lib/api";
 
 interface ProjectItem {
@@ -80,6 +81,16 @@ export default function WorkspacePage() {
       // ignore
     }
     setMenuOpen(null);
+  }
+
+  async function handleDuplicate(id: string) {
+    setMenuOpen(null);
+    try {
+      const newProject = (await duplicateProject(id)) as ProjectItem;
+      setProjects([newProject, ...projects]);
+    } catch {
+      // ignore
+    }
   }
 
   const statusMap: Record<
@@ -187,6 +198,13 @@ export default function WorkspacePage() {
                       </button>
                       {menuOpen === project.id && (
                         <div className="absolute right-0 top-8 z-10 w-36 rounded-lg border border-gray-200 bg-white py-1 shadow-lg">
+                          <button
+                            onClick={() => handleDuplicate(project.id)}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            复制项目
+                          </button>
                           <button
                             onClick={() => handleDelete(project.id)}
                             className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50"

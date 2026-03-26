@@ -40,7 +40,7 @@ export async function fetchProjects() {
   return request<unknown[]>("/api/projects");
 }
 
-export async function createProject(data: { name?: string; description?: string }) {
+export async function createProject(data: { name?: string; description?: string; canvasData?: unknown }) {
   return request("/api/projects", {
     method: "POST",
     body: JSON.stringify(data),
@@ -60,6 +60,10 @@ export async function updateProject(id: string, data: Record<string, unknown>) {
 
 export async function deleteProject(id: string) {
   return request(`/api/projects/${id}`, { method: "DELETE" });
+}
+
+export async function duplicateProject(id: string) {
+  return request(`/api/projects/${id}/duplicate`, { method: "POST" });
 }
 
 // ============ Generation ============
