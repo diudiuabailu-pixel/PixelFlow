@@ -11,7 +11,7 @@ export const sdxlProvider: ModelProvider = {
   creditCost: 5,
 
   async generateImage(params: ImageGenParams): Promise<GenerationResult> {
-    const apiKey = process.env.SDXL_API_KEY;
+    const apiKey = process.env.SILICONFLOW_API_KEY;
 
     if (!apiKey) {
       await new Promise((r) => setTimeout(r, 2000));
@@ -22,10 +22,9 @@ export const sdxlProvider: ModelProvider = {
       };
     }
 
-    // TODO: Replace with actual SDXL/Stability API endpoint
     try {
       const response = await fetch(
-        "https://api.stability.ai/v1/generation/stable-diffusion-xl/text-to-image",
+        "https://api.siliconflow.cn/v1/images/generations",
         {
           method: "POST",
           headers: {
@@ -33,34 +32,39 @@ export const sdxlProvider: ModelProvider = {
             Authorization: `Bearer ${apiKey}`,
           },
           body: JSON.stringify({
-            text_prompts: [
-              { text: params.prompt, weight: 1 },
-              ...(params.negativePrompt
-                ? [{ text: params.negativePrompt, weight: -1 }]
-                : []),
-            ],
-            width: params.width || 1024,
-            height: params.height || 1024,
-            steps: params.steps || 30,
-            seed: params.seed || 0,
+            model: "stabilityai/stable-diffusion-xl-base-1.0",
+            prompt: params.prompt,
+            negative_prompt: params.negativePrompt || "",
+            image_size: `${params.width || 1024}x${params.height || 1024}`,
+            num_inference_steps: params.steps || 30,
+            seed: params.seed,
           }),
         }
       );
 
       if (!response.ok) {
+        const errBody = await response.text().catch(() => "");
         return {
           success: false,
-          error: `SDXL API error: ${response.status}`,
+          error: `SDXL API error: ${response.status} ${errBody}`,
           creditCost: 0,
         };
       }
 
       const data = await response.json();
+      const imageUrl = data.images?.[0]?.url;
+
+      if (!imageUrl) {
+        return {
+          success: false,
+          error: "SDXL API returned no image",
+          creditCost: 0,
+        };
+      }
+
       return {
         success: true,
-        outputUrl: data.artifacts?.[0]?.base64
-          ? `data:image/png;base64,${data.artifacts[0].base64}`
-          : undefined,
+        outputUrl: imageUrl,
         creditCost: this.creditCost,
       };
     } catch (err) {

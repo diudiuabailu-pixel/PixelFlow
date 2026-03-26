@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, use } from "react";
+import { useCallback, useRef, use, useEffect, useState } from "react";
 import {
   ReactFlow,
   addEdge,
@@ -13,6 +13,7 @@ import {
   type Connection,
   type NodeTypes,
   type Node,
+  type Edge,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Link from "next/link";
@@ -26,6 +27,8 @@ import {
   Download,
   Zap,
   ChevronDown,
+  Loader2,
+  Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -33,6 +36,8 @@ import { TextInputNode } from "@/components/canvas/text-input-node";
 import { ImageGenNode } from "@/components/canvas/image-gen-node";
 import { VideoGenNode } from "@/components/canvas/video-gen-node";
 import { OutputNode } from "@/components/canvas/output-node";
+import { useCanvasStore } from "@/lib/canvas-store";
+import { fetchProject, updateProject } from "@/lib/api";
 
 const nodeTypes: NodeTypes = {
   textInput: TextInputNode,
@@ -41,7 +46,7 @@ const nodeTypes: NodeTypes = {
   output: OutputNode,
 };
 
-const initialNodes: Node[] = [
+const defaultNodes: Node[] = [
   {
     id: "input-1",
     type: "textInput",
@@ -62,7 +67,7 @@ const initialNodes: Node[] = [
   },
 ];
 
-const initialEdges = [
+const defaultEdges: Edge[] = [
   { id: "e1", source: "input-1", target: "gen-1", animated: true },
   { id: "e2", source: "gen-1", target: "output-1", animated: true },
 ];
@@ -80,9 +85,69 @@ export default function CanvasPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
+  const [projectName, setProjectName] = useState("项目");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [runningAll, setRunningAll] = useState(false);
   const idCounter = useRef(10);
+  const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const runGeneration = useCanvasStore((s) => s.runGeneration);
+
+  // Load project on mount
+  useEffect(() => {
+    async function loadProject() {
+      try {
+        const project = (await fetchProject(projectId)) as {
+          name: string;
+          canvasData: string;
+        };
+        setProjectName(project.name);
+        if (project.canvasData && project.canvasData !== "{}") {
+          const canvas = JSON.parse(project.canvasData);
+          if (canvas.nodes?.length) {
+            setNodes(canvas.nodes);
+            setEdges(canvas.edges || []);
+          }
+        }
+      } catch {
+        // New project or not found, use defaults
+      }
+      setLoaded(true);
+    }
+    loadProject();
+  }, [projectId, setNodes, setEdges]);
+
+  // Auto-save (debounced)
+  useEffect(() => {
+    if (!loaded) return;
+    if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    saveTimeout.current = setTimeout(() => {
+      saveCanvas(true);
+    }, 3000);
+    return () => {
+      if (saveTimeout.current) clearTimeout(saveTimeout.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodes, edges, loaded]);
+
+  async function saveCanvas(silent = false) {
+    if (!silent) setSaving(true);
+    try {
+      await updateProject(projectId, {
+        canvasData: { nodes, edges },
+      });
+      if (!silent) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch {
+      // Silently fail for auto-save
+    }
+    if (!silent) setSaving(false);
+  }
 
   const onConnect = useCallback(
     (connection: Connection) => {
@@ -105,10 +170,52 @@ export default function CanvasPage({
       {
         id,
         type,
-        position: { x: 300 + Math.random() * 200, y: 100 + Math.random() * 300 },
+        position: {
+          x: 300 + Math.random() * 200,
+          y: 100 + Math.random() * 300,
+        },
         data: dataMap[type] || { label: type },
       },
     ]);
+  }
+
+  // Run All: find all gen nodes, get their connected input, and run
+  async function handleRunAll() {
+    setRunningAll(true);
+
+    const genNodes = nodes.filter(
+      (n) => n.type === "imageGen" || n.type === "videoGen"
+    );
+
+    const promises = genNodes.map((genNode) => {
+      // Find connected input
+      const inputEdge = edges.find((e) => e.target === genNode.id);
+      let prompt = "A beautiful image";
+      if (inputEdge) {
+        const inputNode = nodes.find((n) => n.id === inputEdge.source);
+        if (inputNode?.data) {
+          prompt =
+            (inputNode.data as { value?: string }).value || prompt;
+        }
+      }
+
+      const type = genNode.type === "videoGen" ? "video" : "image";
+      const model = (genNode.data as { model?: string }).model || "FLUX.1";
+
+      return runGeneration({
+        nodeId: genNode.id,
+        type: type as "image" | "video",
+        prompt,
+        model,
+        projectId,
+      });
+    });
+
+    await Promise.allSettled(promises);
+    setRunningAll(false);
+
+    // Auto-save after run
+    saveCanvas(true);
   }
 
   return (
@@ -126,17 +233,38 @@ export default function CanvasPage({
             <Zap className="h-4 w-4 text-white" />
           </div>
           <span className="text-sm font-semibold text-gray-900">
-            项目 {projectId}
+            {projectName}
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="gap-1">
-            <Save className="h-3.5 w-3.5" />
-            保存
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={() => saveCanvas(false)}
+            disabled={saving}
+          >
+            {saving ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : saved ? (
+              <Check className="h-3.5 w-3.5 text-green-500" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            {saved ? "已保存" : "保存"}
           </Button>
-          <Button size="sm" className="gap-1">
-            <Play className="h-3.5 w-3.5" />
-            运行全部
+          <Button
+            size="sm"
+            className="gap-1"
+            onClick={handleRunAll}
+            disabled={runningAll}
+          >
+            {runningAll ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+            {runningAll ? "生成中..." : "运行全部"}
           </Button>
         </div>
       </header>
@@ -206,14 +334,18 @@ export default function CanvasPage({
           </p>
           <div className="mt-4 space-y-4">
             <div>
-              <label className="text-xs font-medium text-gray-500">模型选择</label>
+              <label className="text-xs font-medium text-gray-500">
+                模型选择
+              </label>
               <div className="mt-1 flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
                 FLUX.1
                 <ChevronDown className="h-4 w-4 text-gray-400" />
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500">图片尺寸</label>
+              <label className="text-xs font-medium text-gray-500">
+                图片尺寸
+              </label>
               <div className="mt-1 grid grid-cols-2 gap-2">
                 <div className="rounded-lg border border-violet-300 bg-violet-50 px-3 py-1.5 text-center text-xs font-medium text-violet-700">
                   1024x1024
@@ -224,7 +356,9 @@ export default function CanvasPage({
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500">生成步数</label>
+              <label className="text-xs font-medium text-gray-500">
+                生成步数
+              </label>
               <input
                 type="range"
                 min={10}
@@ -239,9 +373,13 @@ export default function CanvasPage({
               </div>
             </div>
             <div>
-              <label className="text-xs font-medium text-gray-500">运行状态</label>
+              <label className="text-xs font-medium text-gray-500">
+                运行状态
+              </label>
               <div className="mt-1 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
-                就绪 — 点击「运行全部」开始生成
+                {runningAll
+                  ? "⏳ 正在生成..."
+                  : "就绪 — 点击「运行全部」开始生成"}
               </div>
             </div>
           </div>

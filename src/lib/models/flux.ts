@@ -11,7 +11,7 @@ export const fluxProvider: ModelProvider = {
   creditCost: 5,
 
   async generateImage(params: ImageGenParams): Promise<GenerationResult> {
-    const apiKey = process.env.FLUX_API_KEY;
+    const apiKey = process.env.SILICONFLOW_API_KEY;
 
     if (!apiKey) {
       // Dev mode: simulate generation
@@ -23,37 +23,48 @@ export const fluxProvider: ModelProvider = {
       };
     }
 
-    // Production: call actual FLUX API
-    // TODO: Replace with actual API endpoint when available
     try {
-      const response = await fetch("https://api.flux.ai/v1/generate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
-        },
-        body: JSON.stringify({
-          prompt: params.prompt,
-          negative_prompt: params.negativePrompt,
-          width: params.width || 1024,
-          height: params.height || 1024,
-          steps: params.steps || 30,
-          seed: params.seed,
-        }),
-      });
+      const response = await fetch(
+        "https://api.siliconflow.cn/v1/images/generations",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({
+            model: "black-forest-labs/FLUX.1-schnell",
+            prompt: params.prompt,
+            image_size: `${params.width || 1024}x${params.height || 1024}`,
+            num_inference_steps: params.steps || 4,
+            seed: params.seed,
+          }),
+        }
+      );
 
       if (!response.ok) {
+        const errBody = await response.text().catch(() => "");
         return {
           success: false,
-          error: `FLUX API error: ${response.status}`,
+          error: `FLUX API error: ${response.status} ${errBody}`,
           creditCost: 0,
         };
       }
 
       const data = await response.json();
+      const imageUrl = data.images?.[0]?.url;
+
+      if (!imageUrl) {
+        return {
+          success: false,
+          error: "FLUX API returned no image",
+          creditCost: 0,
+        };
+      }
+
       return {
         success: true,
-        outputUrl: data.output_url,
+        outputUrl: imageUrl,
         creditCost: this.creditCost,
       };
     } catch (err) {

@@ -1,13 +1,14 @@
 "use client";
 
 import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
-import { Image, Play, Loader2 } from "lucide-react";
+import { Image, Play, Loader2, AlertCircle } from "lucide-react";
 import { useCanvasStore } from "@/lib/canvas-store";
 
 export function ImageGenNode({ id, data }: NodeProps) {
   const d = data as { label: string; model: string; status: string };
   const { getNode, getEdges } = useReactFlow();
   const status = useCanvasStore((s) => s.nodeStatuses[id] ?? d.status);
+  const outputUrl = useCanvasStore((s) => s.nodeOutputs[id]);
   const runGeneration = useCanvasStore((s) => s.runGeneration);
 
   const statusColors: Record<string, string> = {
@@ -18,7 +19,6 @@ export function ImageGenNode({ id, data }: NodeProps) {
   };
 
   function handleRun() {
-    // Find connected input node to get prompt
     const edges = getEdges();
     const inputEdge = edges.find((e) => e.target === id);
     let prompt = "A beautiful image";
@@ -54,6 +54,18 @@ export function ImageGenNode({ id, data }: NodeProps) {
         <div className={`h-2 w-2 rounded-full ${statusColors[status]}`} />
       </div>
       <div className="space-y-2 p-3">
+        {/* Preview area */}
+        {outputUrl && status === "success" && (
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <img src={outputUrl} alt="Generated" className="w-full object-cover" />
+          </div>
+        )}
+        {status === "failed" && (
+          <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-600">
+            <AlertCircle className="h-3 w-3" />
+            生成失败，请重试
+          </div>
+        )}
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-500">模型</span>
           <span className="font-medium text-gray-700">{d.model}</span>
@@ -72,7 +84,7 @@ export function ImageGenNode({ id, data }: NodeProps) {
           ) : (
             <Play className="h-3 w-3" />
           )}
-          {isRunning ? "生成中..." : "运行"}
+          {isRunning ? "生成中..." : status === "success" ? "重新生成" : "运行"}
         </button>
       </div>
       <Handle

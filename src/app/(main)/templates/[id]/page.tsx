@@ -1,16 +1,67 @@
+"use client";
+
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { ArrowLeft, Copy, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Copy, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { mockTemplates } from "@/lib/mock-data";
+import { cloneTemplate } from "@/lib/api";
 
-export default async function TemplateDetailPage({
+interface Template {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  tags: string;
+  models: string;
+}
+
+export default function TemplateDetailPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
-  const { id } = await params;
-  const template = mockTemplates.find((t) => t.id === id);
+  const { id } = use(params);
+  const router = useRouter();
+  const [template, setTemplate] = useState<Template | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [cloning, setCloning] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch(`/api/templates?all=true`);
+        const templates = (await res.json()) as Template[];
+        const found = templates.find((t) => t.id === id);
+        setTemplate(found || null);
+      } catch {
+        // ignore
+      }
+      setLoading(false);
+    }
+    load();
+  }, [id]);
+
+  async function handleClone() {
+    if (!template) return;
+    setCloning(true);
+    try {
+      const project = (await cloneTemplate(template.id)) as { id: string };
+      router.push(`/canvas/${project.id}`);
+    } catch {
+      setCloning(false);
+      alert("Clone 失败，请先登录");
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-400" />
+      </div>
+    );
+  }
 
   if (!template) {
     return (
@@ -19,6 +70,9 @@ export default async function TemplateDetailPage({
       </div>
     );
   }
+
+  const tags: string[] = JSON.parse(template.tags || "[]");
+  const models: string[] = JSON.parse(template.models || "[]");
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -64,14 +118,12 @@ export default async function TemplateDetailPage({
           <div className="mt-6 space-y-4">
             <div>
               <h3 className="text-sm font-medium text-gray-500">适用场景</h3>
-              <p className="mt-1 text-sm text-gray-700">
-                {template.tags.join("、")}
-              </p>
+              <p className="mt-1 text-sm text-gray-700">{tags.join("、")}</p>
             </div>
             <div>
               <h3 className="text-sm font-medium text-gray-500">使用模型</h3>
               <div className="mt-1 flex gap-1.5">
-                {template.models.map((m) => (
+                {models.map((m) => (
                   <Badge key={m} variant="secondary">
                     {m}
                   </Badge>
@@ -87,12 +139,19 @@ export default async function TemplateDetailPage({
           </div>
 
           <div className="mt-8">
-            <Link href="/workspace">
-              <Button size="lg" className="w-full gap-2">
+            <Button
+              size="lg"
+              className="w-full gap-2"
+              onClick={handleClone}
+              disabled={cloning}
+            >
+              {cloning ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
                 <Copy className="h-4 w-4" />
-                Clone 到工作空间
-              </Button>
-            </Link>
+              )}
+              {cloning ? "创建中..." : "Clone 到工作空间"}
+            </Button>
           </div>
         </div>
       </div>

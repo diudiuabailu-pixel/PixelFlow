@@ -1,23 +1,37 @@
 "use client";
 
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
 import { Type } from "lucide-react";
+import { useCallback } from "react";
 
-export function TextInputNode({ data }: NodeProps) {
+export function TextInputNode({ id, data }: NodeProps) {
+  const { setNodes } = useReactFlow();
+  const d = data as { label: string; value: string };
+
+  const onChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      setNodes((nds) =>
+        nds.map((n) =>
+          n.id === id ? { ...n, data: { ...n.data, value: e.target.value } } : n
+        )
+      );
+    },
+    [id, setNodes]
+  );
+
   return (
     <div className="w-56 rounded-xl border-2 border-blue-300 bg-white shadow-sm">
       <div className="flex items-center gap-2 rounded-t-xl bg-blue-50 px-3 py-2">
         <Type className="h-4 w-4 text-blue-600" />
-        <span className="text-xs font-semibold text-blue-700">
-          {(data as { label: string }).label}
-        </span>
+        <span className="text-xs font-semibold text-blue-700">{d.label}</span>
       </div>
       <div className="p-3">
         <textarea
           className="w-full resize-none rounded-lg border border-gray-200 p-2 text-xs placeholder:text-gray-400 focus:border-blue-300 focus:outline-none"
           rows={3}
           placeholder="输入 Prompt..."
-          defaultValue={(data as { value: string }).value}
+          value={d.value || ""}
+          onChange={onChange}
         />
       </div>
       <Handle

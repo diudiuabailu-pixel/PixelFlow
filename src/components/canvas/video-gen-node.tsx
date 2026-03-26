@@ -1,13 +1,14 @@
 "use client";
 
 import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
-import { Video, Play, Loader2 } from "lucide-react";
+import { Video, Play, Loader2, AlertCircle } from "lucide-react";
 import { useCanvasStore } from "@/lib/canvas-store";
 
 export function VideoGenNode({ id, data }: NodeProps) {
   const d = data as { label: string; model: string; status: string };
   const { getNode, getEdges } = useReactFlow();
   const status = useCanvasStore((s) => s.nodeStatuses[id] ?? d.status);
+  const outputUrl = useCanvasStore((s) => s.nodeOutputs[id]);
   const runGeneration = useCanvasStore((s) => s.runGeneration);
 
   const statusColors: Record<string, string> = {
@@ -47,6 +48,17 @@ export function VideoGenNode({ id, data }: NodeProps) {
         <div className={`h-2 w-2 rounded-full ${statusColors[status]}`} />
       </div>
       <div className="space-y-2 p-3">
+        {outputUrl && status === "success" && (
+          <div className="overflow-hidden rounded-lg border border-gray-200">
+            <video src={outputUrl} controls className="w-full" />
+          </div>
+        )}
+        {status === "failed" && (
+          <div className="flex items-center gap-1 rounded-lg bg-red-50 p-2 text-xs text-red-600">
+            <AlertCircle className="h-3 w-3" />
+            生成失败，请重试
+          </div>
+        )}
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-500">模型</span>
           <span className="font-medium text-gray-700">{d.model}</span>
@@ -61,7 +73,7 @@ export function VideoGenNode({ id, data }: NodeProps) {
           className="flex w-full items-center justify-center gap-1 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700 disabled:opacity-50"
         >
           {isRunning ? <Loader2 className="h-3 w-3 animate-spin" /> : <Play className="h-3 w-3" />}
-          {isRunning ? "生成中..." : "运行"}
+          {isRunning ? "生成中..." : status === "success" ? "重新生成" : "运行"}
         </button>
       </div>
       <Handle
