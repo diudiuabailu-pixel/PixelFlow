@@ -12,6 +12,15 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
+// ============ Explore ============
+
+export async function fetchExploreWorks(category?: string, q?: string) {
+  const params = new URLSearchParams();
+  if (category && category !== "全部") params.set("category", category);
+  if (q) params.set("q", q);
+  return request<unknown[]>(`/api/explore?${params}`);
+}
+
 // ============ Templates ============
 
 export async function fetchTemplates(category?: string, q?: string) {

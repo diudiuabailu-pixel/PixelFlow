@@ -5,18 +5,14 @@ import { Type } from "lucide-react";
 import { useCallback } from "react";
 
 export function TextInputNode({ id, data }: NodeProps) {
-  const { setNodes } = useReactFlow();
+  const { updateNodeData } = useReactFlow();
   const d = data as { label: string; value: string };
 
   const onChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      setNodes((nds) =>
-        nds.map((n) =>
-          n.id === id ? { ...n, data: { ...n.data, value: e.target.value } } : n
-        )
-      );
+      updateNodeData(id, { value: e.target.value });
     },
-    [id, setNodes]
+    [id, updateNodeData]
   );
 
   return (

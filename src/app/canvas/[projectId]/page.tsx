@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, use, useEffect, useState } from "react";
+import { useCallback, useRef, use, useState, useEffect } from "react";
 import {
   ReactFlow,
   addEdge,
@@ -10,6 +10,8 @@ import {
   Background,
   BackgroundVariant,
   Panel,
+  useReactFlow,
+  ReactFlowProvider,
   type Connection,
   type NodeTypes,
   type Node,
@@ -36,8 +38,8 @@ import { TextInputNode } from "@/components/canvas/text-input-node";
 import { ImageGenNode } from "@/components/canvas/image-gen-node";
 import { VideoGenNode } from "@/components/canvas/video-gen-node";
 import { OutputNode } from "@/components/canvas/output-node";
-import { useCanvasStore } from "@/lib/canvas-store";
 import { fetchProject, updateProject } from "@/lib/api";
+import { useCanvasStore } from "@/lib/canvas-store";
 
 const nodeTypes: NodeTypes = {
   textInput: TextInputNode,
@@ -79,21 +81,17 @@ const nodeCategories = [
   { type: "output", label: "输出", icon: Download },
 ];
 
-export default function CanvasPage({
-  params,
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
-  const { projectId } = use(params);
+function CanvasInner({ projectId }: { projectId: string }) {
   const [nodes, setNodes, onNodesChange] = useNodesState(defaultNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(defaultEdges);
   const [projectName, setProjectName] = useState("项目");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [loaded, setLoaded] = useState(false);
   const [runningAll, setRunningAll] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const idCounter = useRef(10);
-  const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { getNodes, getEdges, getNode } = useReactFlow();
   const runGeneration = useCanvasStore((s) => s.runGeneration);
 
   // Load project on mount
@@ -106,10 +104,19 @@ export default function CanvasPage({
         };
         setProjectName(project.name);
         if (project.canvasData && project.canvasData !== "{}") {
-          const canvas = JSON.parse(project.canvasData);
-          if (canvas.nodes?.length) {
-            setNodes(canvas.nodes);
-            setEdges(canvas.edges || []);
+          try {
+            const canvas = JSON.parse(project.canvasData);
+            if (canvas.nodes?.length > 0) {
+              setNodes(canvas.nodes);
+              setEdges(canvas.edges || []);
+              const maxId = canvas.nodes.reduce((max: number, n: Node) => {
+                const num = parseInt(n.id.replace(/\D/g, "")) || 0;
+                return Math.max(max, num);
+              }, 0);
+              idCounter.current = maxId + 1;
+            }
+          } catch {
+            // Invalid JSON, use defaults
           }
         }
       } catch {
@@ -120,7 +127,7 @@ export default function CanvasPage({
     loadProject();
   }, [projectId, setNodes, setEdges]);
 
-  // Auto-save (debounced)
+  // Auto-save (debounced 3s)
   useEffect(() => {
     if (!loaded) return;
     if (saveTimeout.current) clearTimeout(saveTimeout.current);
@@ -136,9 +143,13 @@ export default function CanvasPage({
   async function saveCanvas(silent = false) {
     if (!silent) setSaving(true);
     try {
-      await updateProject(projectId, {
-        canvasData: { nodes, edges },
+      const currentNodes = getNodes();
+      const currentEdges = getEdges();
+      const canvasData = JSON.stringify({
+        nodes: currentNodes,
+        edges: currentEdges,
       });
+      await updateProject(projectId, { canvasData, status: "active" });
       if (!silent) {
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
@@ -179,43 +190,47 @@ export default function CanvasPage({
     ]);
   }
 
-  // Run All: find all gen nodes, get their connected input, and run
+  // Run all generation nodes sequentially
   async function handleRunAll() {
     setRunningAll(true);
+    const currentNodes = getNodes();
+    const currentEdges = getEdges();
 
-    const genNodes = nodes.filter(
+    const genNodes = currentNodes.filter(
       (n) => n.type === "imageGen" || n.type === "videoGen"
     );
 
-    const promises = genNodes.map((genNode) => {
-      // Find connected input
-      const inputEdge = edges.find((e) => e.target === genNode.id);
+    for (const genNode of genNodes) {
+      const inputEdge = currentEdges.find((e) => e.target === genNode.id);
       let prompt = "A beautiful image";
       if (inputEdge) {
-        const inputNode = nodes.find((n) => n.id === inputEdge.source);
+        const inputNode = getNode(inputEdge.source);
         if (inputNode?.data) {
-          prompt =
-            (inputNode.data as { value?: string }).value || prompt;
+          prompt = (inputNode.data as { value?: string }).value || prompt;
         }
       }
 
-      const type = genNode.type === "videoGen" ? "video" : "image";
       const model = (genNode.data as { model?: string }).model || "FLUX.1";
+      const type = genNode.type === "videoGen" ? "video" : "image";
 
-      return runGeneration({
+      await runGeneration({
         nodeId: genNode.id,
         type: type as "image" | "video",
         prompt,
         model,
         projectId,
       });
-    });
+    }
 
-    await Promise.allSettled(promises);
     setRunningAll(false);
+  }
 
-    // Auto-save after run
-    saveCanvas(true);
+  if (!loaded) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-gray-50">
+        <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+      </div>
+    );
   }
 
   return (
@@ -251,7 +266,7 @@ export default function CanvasPage({
             ) : (
               <Save className="h-3.5 w-3.5" />
             )}
-            {saved ? "已保存" : "保存"}
+            {saving ? "保存中..." : saved ? "已保存" : "保存"}
           </Button>
           <Button
             size="sm"
@@ -264,7 +279,7 @@ export default function CanvasPage({
             ) : (
               <Play className="h-3.5 w-3.5" />
             )}
-            {runningAll ? "生成中..." : "运行全部"}
+            {runningAll ? "运行中..." : "运行全部"}
           </Button>
         </div>
       </header>
@@ -378,7 +393,7 @@ export default function CanvasPage({
               </label>
               <div className="mt-1 rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
                 {runningAll
-                  ? "⏳ 正在生成..."
+                  ? "⚡ 运行中 — 正在执行生成任务..."
                   : "就绪 — 点击「运行全部」开始生成"}
               </div>
             </div>
@@ -386,5 +401,18 @@ export default function CanvasPage({
         </aside>
       </div>
     </div>
+  );
+}
+
+export default function CanvasPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
+  const { projectId } = use(params);
+  return (
+    <ReactFlowProvider>
+      <CanvasInner projectId={projectId} />
+    </ReactFlowProvider>
   );
 }

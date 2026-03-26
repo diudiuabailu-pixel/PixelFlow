@@ -1,27 +1,58 @@
 "use client";
 
-import { useState } from "react";
-import { Heart, Search, Sparkles } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Heart, Search, Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { fetchExploreWorks } from "@/lib/api";
 import { mockExploreWorks } from "@/lib/mock-data";
 
-const categories = ["全部", "概念艺术", "插画", "电商", "视频", "人像", "广告"];
+const categories = ["全部", "图像", "视频"];
+
+interface ExploreWork {
+  id: string;
+  title: string;
+  prompt?: string;
+  author: string;
+  thumbnail: string | null;
+  category: string;
+  model?: string;
+  likes?: number;
+}
 
 export default function ExplorePage() {
   const [activeCategory, setActiveCategory] = useState("全部");
   const [searchQuery, setSearchQuery] = useState("");
+  const [works, setWorks] = useState<ExploreWork[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingMock, setUsingMock] = useState(false);
 
-  const filteredWorks = mockExploreWorks.filter((work) => {
-    const matchesCategory =
-      activeCategory === "全部" || work.category === activeCategory;
-    const matchesSearch =
-      !searchQuery ||
-      work.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      work.author.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const loadWorks = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = (await fetchExploreWorks(activeCategory, searchQuery)) as ExploreWork[];
+      if (data.length === 0 && !searchQuery && activeCategory === "全部") {
+        // No real data yet — show mock data as showcase
+        setWorks(mockExploreWorks as ExploreWork[]);
+        setUsingMock(true);
+      } else {
+        setWorks(data);
+        setUsingMock(false);
+      }
+    } catch {
+      // API error fallback to mock
+      setWorks(mockExploreWorks as ExploreWork[]);
+      setUsingMock(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [activeCategory, searchQuery]);
+
+  useEffect(() => {
+    const timer = setTimeout(loadWorks, 300);
+    return () => clearTimeout(timer);
+  }, [loadWorks]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -58,45 +89,69 @@ export default function ExplorePage() {
         ))}
       </div>
 
+      {usingMock && (
+        <div className="mt-4 rounded-lg bg-violet-50 px-4 py-2 text-sm text-violet-600">
+          展示示例作品 — 开始创作后，你的公开作品将出现在这里
+        </div>
+      )}
+
+      {/* Loading */}
+      {loading && (
+        <div className="mt-20 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-violet-500" />
+        </div>
+      )}
+
       {/* Works Grid */}
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {filteredWorks.map((work) => (
-          <div
-            key={work.id}
-            className="group cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:shadow-lg"
-          >
-            <div className="relative aspect-square bg-gradient-to-br from-violet-50 to-purple-100">
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Sparkles className="h-12 w-12 text-violet-200" />
+      {!loading && (
+        <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {works.map((work) => (
+            <div
+              key={work.id}
+              className="group cursor-pointer overflow-hidden rounded-xl border border-gray-200 bg-white transition-all hover:shadow-lg"
+            >
+              <div className="relative aspect-square bg-gradient-to-br from-violet-50 to-purple-100">
+                {work.thumbnail ? (
+                  <img
+                    src={work.thumbnail}
+                    alt={work.title}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Sparkles className="h-12 w-12 text-violet-200" />
+                  </div>
+                )}
+                <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
+                <div className="absolute right-3 top-3">
+                  <Badge variant="secondary">{work.category}</Badge>
+                </div>
+                {work.model && (
+                  <div className="absolute left-3 top-3">
+                    <Badge variant="outline" className="bg-white/80 text-xs">
+                      {work.model}
+                    </Badge>
+                  </div>
+                )}
               </div>
-              <div className="absolute inset-0 bg-black/0 transition-colors group-hover:bg-black/10" />
-              <div className="absolute right-3 top-3">
-                <Badge variant="secondary">{work.category}</Badge>
-              </div>
-            </div>
-            <div className="p-4">
-              <h3 className="font-semibold text-gray-900">{work.title}</h3>
-              <div className="mt-2 flex items-center justify-between">
-                <span className="text-sm text-gray-500">{work.author}</span>
-                <div className="flex items-center gap-1 text-sm text-gray-400">
-                  <Heart className="h-4 w-4" />
-                  {work.likes}
+              <div className="p-4">
+                <h3 className="font-semibold text-gray-900">{work.title}</h3>
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-sm text-gray-500">{work.author}</span>
+                  {work.likes !== undefined && (
+                    <div className="flex items-center gap-1 text-sm text-gray-400">
+                      <Heart className="h-4 w-4" />
+                      {work.likes}
+                    </div>
+                  )}
                 </div>
               </div>
-              <div className="mt-3 flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1 text-xs">
-                  Get Recipe
-                </Button>
-                <Button size="sm" className="flex-1 text-xs">
-                  Clone Workflow
-                </Button>
-              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {filteredWorks.length === 0 && (
+      {!loading && works.length === 0 && (
         <div className="mt-20 text-center">
           <Sparkles className="mx-auto h-12 w-12 text-gray-300" />
           <p className="mt-4 text-gray-500">没有找到匹配的作品</p>
