@@ -1,0 +1,30 @@
+"use client";
+
+import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Type } from "lucide-react";
+
+export function TextInputNode({ data }: NodeProps) {
+  return (
+    <div className="w-56 rounded-xl border-2 border-blue-300 bg-white shadow-sm">
+      <div className="flex items-center gap-2 rounded-t-xl bg-blue-50 px-3 py-2">
+        <Type className="h-4 w-4 text-blue-600" />
+        <span className="text-xs font-semibold text-blue-700">
+          {(data as { label: string }).label}
+        </span>
+      </div>
+      <div className="p-3">
+        <textarea
+          className="w-full resize-none rounded-lg border border-gray-200 p-2 text-xs placeholder:text-gray-400 focus:border-blue-300 focus:outline-none"
+          rows={3}
+          placeholder="输入 Prompt..."
+          defaultValue={(data as { value: string }).value}
+        />
+      </div>
+      <Handle
+        type="source"
+        position={Position.Right}
+        className="!h-3 !w-3 !border-2 !border-blue-400 !bg-white"
+      />
+    </div>
+  );
+}
