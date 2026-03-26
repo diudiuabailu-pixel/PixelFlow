@@ -1,10 +1,20 @@
 "use client";
 
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, Position, type NodeProps, useReactFlow } from "@xyflow/react";
 import { Download, Sparkles } from "lucide-react";
+import { useCanvasStore } from "@/lib/canvas-store";
 
-export function OutputNode({ data }: NodeProps) {
+export function OutputNode({ id, data }: NodeProps) {
   const d = data as { label: string; type: string; url: string | null };
+  const { getEdges } = useReactFlow();
+
+  // Find connected generation node and get its output
+  const edges = getEdges();
+  const inputEdge = edges.find((e) => e.target === id);
+  const sourceNodeId = inputEdge?.source;
+  const storeOutput = useCanvasStore(
+    (s) => (sourceNodeId ? s.nodeOutputs[sourceNodeId] : null) ?? d.url
+  );
 
   return (
     <div className="w-56 rounded-xl border-2 border-green-300 bg-white shadow-sm">
@@ -18,9 +28,13 @@ export function OutputNode({ data }: NodeProps) {
         <span className="text-xs font-semibold text-green-700">{d.label}</span>
       </div>
       <div className="p-3">
-        <div className="flex aspect-square items-center justify-center rounded-lg border border-gray-200 bg-gray-50">
-          {d.url ? (
-            <img src={d.url} alt="Output" className="h-full w-full rounded-lg object-cover" />
+        <div className="flex aspect-square items-center justify-center rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
+          {storeOutput ? (
+            <img
+              src={storeOutput}
+              alt="Output"
+              className="h-full w-full rounded-lg object-cover"
+            />
           ) : (
             <div className="text-center">
               <Sparkles className="mx-auto h-8 w-8 text-gray-300" />
@@ -28,10 +42,14 @@ export function OutputNode({ data }: NodeProps) {
             </div>
           )}
         </div>
-        <button className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50">
+        <a
+          href={storeOutput || "#"}
+          download
+          className={`mt-2 flex w-full items-center justify-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium ${storeOutput ? "text-gray-600 hover:bg-gray-50" : "text-gray-300 pointer-events-none"}`}
+        >
           <Download className="h-3 w-3" />
           下载
-        </button>
+        </a>
       </div>
     </div>
   );
