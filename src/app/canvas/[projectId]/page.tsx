@@ -27,7 +27,6 @@ import {
   Image,
   Video,
   Download,
-  Zap,
   Loader2,
   Check,
   PanelLeftOpen,
@@ -43,6 +42,7 @@ import { VideoGenNode } from "@/components/canvas/video-gen-node";
 import { OutputNode } from "@/components/canvas/output-node";
 import { fetchProject, updateProject } from "@/lib/api";
 import { useCanvasStore } from "@/lib/canvas-store";
+import { Logo } from "@/components/ui/logo";
 
 const nodeTypes: NodeTypes = {
   textInput: TextInputNode,
@@ -448,9 +448,7 @@ function CanvasInner({ projectId }: { projectId: string }) {
           >
             <ArrowLeft className="h-4 w-4" />
           </Link>
-          <div className="flex h-7 w-7 items-center justify-center rounded bg-violet-600">
-            <Zap className="h-4 w-4 text-white" />
-          </div>
+          <Logo size={28} className="rounded" />
           <span className="text-sm font-semibold text-gray-900 truncate max-w-[120px] sm:max-w-none">
             {projectName}
           </span>

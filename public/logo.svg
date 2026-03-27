@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#7C3AED"/>
+  <rect x="96" y="96" width="80" height="80" rx="12" fill="white" opacity="0.9"/>
+  <rect x="216" y="96" width="80" height="80" rx="12" fill="white" opacity="0.7"/>
+  <rect x="336" y="96" width="80" height="80" rx="12" fill="white" opacity="0.5"/>
+  <rect x="96" y="216" width="80" height="80" rx="12" fill="white" opacity="0.7"/>
+  <rect x="216" y="216" width="80" height="80" rx="12" fill="white" opacity="1"/>
+  <rect x="336" y="216" width="80" height="80" rx="12" fill="white" opacity="0.7"/>
+  <rect x="96" y="336" width="80" height="80" rx="12" fill="white" opacity="0.5"/>
+  <rect x="216" y="336" width="80" height="80" rx="12" fill="white" opacity="0.7"/>
+  <rect x="336" y="336" width="80" height="80" rx="12" fill="white" opacity="0.9"/>
+  <!-- Flow arrow overlay -->
+  <path d="M136 376 L296 256 L376 136" stroke="white" stroke-width="24" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <path d="M136 376 L296 256 L376 136" stroke="#7C3AED" stroke-width="16" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+</svg>

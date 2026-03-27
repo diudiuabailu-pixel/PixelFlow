@@ -4,7 +4,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
-import { Zap, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Logo } from "@/components/ui/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { registerUser } from "@/lib/api";
@@ -51,9 +52,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm px-4">
         <div className="text-center">
           <Link href="/" className="inline-flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-violet-600">
-              <Zap className="h-6 w-6 text-white" />
-            </div>
+            <Logo size={40} className="rounded-lg" />
           </Link>
           <h1 className="mt-4 text-2xl font-bold text-gray-900">
             {isRegister ? "注册 PixelFlow" : "登录 PixelFlow"}
