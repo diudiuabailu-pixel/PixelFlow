@@ -192,13 +192,22 @@ const templates = [
   },
 ];
 
+const styles = ["abstract", "geometric", "waves", "landscape"];
+
 async function main() {
   console.log("Clearing existing templates...");
   await prisma.template.deleteMany();
 
   console.log("Seeding templates...");
-  for (const tpl of templates) {
-    await prisma.template.create({ data: tpl });
+  for (let i = 0; i < templates.length; i++) {
+    const tpl = templates[i];
+    const style = styles[i % styles.length];
+    await prisma.template.create({
+      data: {
+        ...tpl,
+        thumbnail: `/api/placeholder?w=600&h=400&style=${style}&seed=${encodeURIComponent(tpl.name)}`,
+      },
+    });
   }
   console.log(`Seeded ${templates.length} templates.`);
 }

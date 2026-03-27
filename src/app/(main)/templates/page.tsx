@@ -14,6 +14,7 @@ interface TemplateItem {
   name: string;
   description: string;
   category: string;
+  thumbnail: string;
   models: string[];
   tags: string[];
 }
@@ -112,9 +113,13 @@ export default function TemplatesPage() {
                 className="overflow-hidden rounded-xl border border-gray-200 bg-white transition-shadow hover:shadow-lg"
               >
                 <div className="relative aspect-video bg-gradient-to-br from-violet-50 to-purple-100">
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Sparkles className="h-10 w-10 text-violet-200" />
-                  </div>
+                  {tpl.thumbnail ? (
+                    <img src={tpl.thumbnail} alt={tpl.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <Sparkles className="h-10 w-10 text-violet-200" />
+                    </div>
+                  )}
                   <div className="absolute right-3 top-3">
                     <Badge>{tpl.category}</Badge>
                   </div>

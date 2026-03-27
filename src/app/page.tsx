@@ -214,24 +214,26 @@ export default function LandingPage() {
           </div>
           <div className="mt-16 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
             {[
-              "电商商品主图",
-              "社交媒体封面",
-              "短视频片头",
-              "品牌广告海报",
-              "分镜脚本可视化",
-              "AI 写真照",
-              "Logo 概念设计",
-              "产品宣传视频",
-            ].map((name) => (
+              { name: "电商商品主图", style: "geometric", seed: "ecom-main" },
+              { name: "社交媒体封面", style: "waves", seed: "social-cover" },
+              { name: "短视频片头", style: "abstract", seed: "video-intro" },
+              { name: "品牌广告海报", style: "geometric", seed: "ad-poster" },
+              { name: "分镜脚本可视化", style: "landscape", seed: "storyboard" },
+              { name: "AI 写真照", style: "abstract", seed: "ai-portrait" },
+              { name: "Logo 概念设计", style: "geometric", seed: "logo-design" },
+              { name: "产品宣传视频", style: "waves", seed: "promo-video" },
+            ].map((item) => (
               <div
-                key={name}
+                key={item.name}
                 className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-gray-200 bg-gray-100 transition-all hover:shadow-md"
               >
-                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-violet-50 to-purple-100">
-                  <Play className="h-8 w-8 text-violet-300" />
-                </div>
+                <img
+                  src={`/api/placeholder?w=400&h=300&style=${item.style}&seed=${item.seed}`}
+                  alt={item.name}
+                  className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                />
                 <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-3">
-                  <p className="text-sm font-medium text-white">{name}</p>
+                  <p className="text-sm font-medium text-white">{item.name}</p>
                 </div>
               </div>
             ))}
